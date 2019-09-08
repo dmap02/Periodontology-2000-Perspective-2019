@@ -1,0 +1,188 @@
+---
+title: "Periodontology 2000 - PreFiltering"
+author: "Diana Proctor"
+date: "9/21/2018"
+output: html_document
+---
+##################Note: This section was done using Qiita/Qiime
+#process forward reads
+split_libraries_fastq.py -i 539_s_G1_L001_R1_sequences.fastq -o split_library_f/ -m 2753_mapping_file.txt -b 539_s_G1_L001_R1_sequences_barcodes.fastq --store_demultiplexed_fastq --barcode_type 12 -r 999 -n 999 -q 0 -p 0.0001 & 
+
+#process reverse reads
+split_libraries_fastq.py -i 539_s_G1_L001_R2_sequences.fastq -o split_library_r/ -m 2753_mapping_file.txt -b 539_s_G1_L001_R1_sequences_barcodes.fastq --store_demultiplexed_fastq --barcode_type 12 -r 999 -n 999 -q 0 -p 0.0001 &
+
+####### reverse complement the barcodes
+#process forward reads
+split_libraries_fastq.py -i 539_s_G1_L001_R1_sequences.fastq -o split_library_f_rc/ -m 2753_mapping_file.txt -b 539_s_G1_L001_R1_sequences_barcodes.fastq --store_demultiplexed_fastq --barcode_type 12 -r 999 -n 999 -q 0 -p 0.0001 --rev_comp_mapping_barcodes & 
+
+#process reverse reads
+split_libraries_fastq.py -i 539_s_G1_L001_R2_sequences.fastq -o split_library_r_rc/ -m 2753_mapping_file.txt -b 539_s_G1_L001_R1_sequences_barcodes.fastq --store_demultiplexed_fastq --barcode_type 12 -r 999 -n 999 -q 0 -p 0.0001 --rev_comp_mapping_barcodes &
+
+
+####### allow golay
+#process forward reads
+split_libraries_fastq.py -i 539_s_G1_L001_R1_sequences.fastq -o split_library_f_golay/ -m 2753_mapping_file.txt -b 539_s_G1_L001_R1_sequences_barcodes.fastq --store_demultiplexed_fastq  -r 999 -n 999 -q 0 -p 0.0001 --rev_comp_mapping_barcodes & 
+
+#process reverse reads
+split_libraries_fastq.py -i 539_s_G1_L001_R2_sequences.fastq -o split_library_r_golay/ -m 2753_mapping_file.txt -b 539_s_G1_L001_R1_sequences_barcodes.fastq --store_demultiplexed_fastq  -r 999 -n 999 -q 0 -p 0.0001 --rev_comp_mapping_barcodes &
+
+
+#forward read; 
+split_sequence_file_on_sample_ids.py -i /Users/dmap/Desktop/study_1032_092018-144936/study_raw_data_1032_092018-144929/raw_data/split_library_f_golay/seqs.fastq  -o /Users/dmap/Desktop/study_1032_092018-144936/study_raw_data_1032_092018-144929/raw_data/split_library_f_golay/split_f/ --file_type fastq &
+
+
+#reverse read; 
+split_sequence_file_on_sample_ids.py -i /Users/dmap/Desktop/study_1032_092018-144936/study_raw_data_1032_092018-144929/raw_data/split_library_r_golay/seqs.fastq  -o /Users/dmap/Desktop/study_1032_092018-144936/study_raw_data_1032_092018-144929/raw_data/split_library_r_golay/split_r/ --file_type fastq &
+
+##################Note: This section was done using dada2/phyloseq in R.
+
+# load packages
+
+library(ShortRead); packageVersion("ShortRead");library("phyloseq")
+library(ggplot2); packageVersion("ggplot2")
+library(dada2); packageVersion("dada2"); library(stringr);library(reshape2)
+
+#get the file paths for the sequence data
+path_foward <- "/Users/dmap/Desktop/study_1032_092018-144936/study_raw_data_1032_092018-144929/raw_data/split_library_f_golay/split_f"
+path_reverse <- "/Users/dmap/Desktop/study_1032_092018-144936/study_raw_data_1032_092018-144929/raw_data/split_library_r_golay/split_r"
+#get the file names
+list.files(path_foward)
+list.files(path_reverse)
+
+# Forward and reverse fastq filenames have format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+fnFs <- sort(list.files(path_foward, pattern=".fastq", full.names = TRUE))
+
+fnRs <- sort(list.files(path_reverse, pattern=".fastq", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+df = data.frame(list.files(path_foward))
+s = colsplit(df$list.files.path_foward., ".fastq", c("sample", "junk"))
+sample_names = as.vector(s$sample)
+
+#get filenames for forward reads
+fns_forward <- list.files(path_foward)
+fns_forward <- fns_forward[grepl(".fastq$", fns_forward)]
+
+#filenames for reverse reads
+fns_reverse <- list.files(path_reverse)
+fns_reverse <- fns_reverse[grepl(".fastq$", fns_reverse)]
+
+
+### Filtering and trimming
+fastqs_for <- fns_forward[grepl(".fastq$", fns_forward)]
+fastqs_rev <- fns_forward[grepl(".fastq$", fns_reverse)]
+
+
+#name the filtered output
+filtFs <- file.path(path_foward, paste0(sample_names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path_reverse, paste0(sample_names, "_R_filt.fastq.gz"))
+
+#name the file inputs with the filenaptsh
+fns_forward <- file.path(path_foward, paste0(sample_names, ".fastq"))
+fns_reverse <- file.path(path_reverse, paste0(sample_names, ".fastq"))
+
+
+#look at the quality scores for the forward and reverse reads, just peek at the first 9
+plotQualityProfile(fnFs[1:9]) #quality declines at around 50 but will cut off at 125
+plotQualityProfile(fnRs[1:9])
+
+### Filter
+for(i in seq_along(fns_forward)) {
+  fastqPairedFilter(c(fns_forward[i], fns_reverse[i]), c(filtFs[i], filtRs[i]),
+                    truncLen=c(125,100), 
+                    maxN=0, maxEE=c(2,5), truncQ=2, rm.phix=TRUE,
+                    compress=TRUE, verbose=TRUE)
+}
+
+
+#get the names of the files that successfully filtered
+filtFs <- sort(list.files(path_foward, pattern=".gz", full.names = TRUE))
+length(filtFs)
+filtRs <- sort(list.files(path_reverse, pattern=".gz", full.names = TRUE))
+length(filtRs)
+
+#make a vector of the filtered sample names from the  names of the filtered files
+#you should check whether filenames for forward and reverse reads are the same; this was done on the console; they are
+new.names = str_split_fixed(filtRs, "/", n=100)
+filtnames = str_split_fixed(new.names[,10], "_", n=2)
+filtnames = as.vector(filtnames[,1])
+
+#dereplicate
+derepFs <- derepFastq(filtFs, verbose=TRUE)
+derepRs <- derepFastq(filtRs, verbose=TRUE)
+
+# Name the derep-class objects by the sample names
+names(derepFs) <- filtnames
+names(derepRs) <- filtnames
+
+### Sample Inference
+
+#learn the error rates
+dadaFs.lrn <- dada(derepFs, err=NULL, selfConsist = TRUE, multithread=TRUE)
+errF <- dadaFs.lrn[[1]]$err_out
+dadaRs.lrn <- dada(derepRs, err=NULL, selfConsist = TRUE, multithread=TRUE)
+errR <- dadaRs.lrn[[1]]$err_out
+plotErrors(errF, nominalQ=TRUE)
+plotErrors(errR, nominalQ=TRUE)
+
+#run these next
+dadaFs <- dada(derepFs, err=errF, multithread=TRUE)
+dadaRs <- dada(derepRs, err=errR, multithread=TRUE)
+
+### Merge Pair reads
+mergers <- mergePairs(dadaFs, derepFs, dadaRs, derepRs, verbose=TRUE)
+# Inspect the merger data.frame from the first sample
+head(mergers[[1]])
+
+### Construct the ASV Table
+
+#merged sequences; which didn't retain many reads
+merged_seqtab <- makeSequenceTable(mergers)
+dim(merged_seqtab)
+table(nchar(colnames(merged_seqtab)))
+
+#just the forward reads
+seqtab <- makeSequenceTable(dadaFs)
+dim(seqtab)
+tab
+
+### Remove chimeric sequences
+seqtab.nochim <- removeBimeraDenovo(seqtab, verbose=TRUE)
+dim(seqtab.nochim)
+
+### Assign Taxonomy
+
+taxa <- assignTaxonomy(seqtab.nochim, "~/Dropbox/rdp_train_set_14.fa.gz")
+      map = read.csv("~/Dropbox/2753_mapping_file.csv")
+      coo = read.csv("~/Dropbox/mytoothdot_coordinates_FullMouth_sub.csv")
+      map = join(map, coo, by="Specifier")
+      rownames(map) <- map$SampleID
+
+
+###make the phylogenetic tree
+
+    library(DECIPHER);library(dada2)
+    seqs <- getSequences(seqtab.nochim)
+    names(seqs) <- seqs # This propagates to the tip labels of the tree
+    alignment <- AlignSeqs(DNAStringSet(seqs), anchor=NA)
+    
+    #phangorm
+    phang.align <- phyDat(as(alignment, "matrix"), type="DNA")
+    dm <- dist.ml(phang.align)
+    treeNJ <- NJ(dm) # Note, tip order != sequence order
+    fit = pml(treeNJ, data=phang.align)
+
+## negative edges length changed to 0!
+
+fitGTR <- update(fit, k=4, inv=0.2)
+fitGTR <- optim.pml(fitGTR, model="GTR", optInv=TRUE, optGamma=TRUE,
+                      rearrangement = "stochastic", control = pml.control(trace = 0))
+detach("package:phangorn", unload=TRUE)
+
+
+
+katie_biogeo <- phyloseq(otu_table(seqtab.nochim, taxa_are_rows=FALSE), 
+               sample_data(map), 
+               tax_table(taxa),
+               phy_tree(fitGTR$tree))
+
+saveRDS(katie_biogeo, file="katie_biogeo_tree.RDS")

@@ -1,0 +1,628 @@
+---
+title: "Periodontology 2000 - Main Figures, Submitted" 
+author: "Diana Proctor"
+date: "February 11, 2019"
+output: html_document
+
+
+---
+
+This script was used in conjunction with a script to generate figures for the paper "Title: Microbial biogeography and ecology of the mouth and implications for periodontal diseases" by
+
+Diana M. Proctor1,2,10, Katie M. Shelef3,10, Antonio Gonzales4, Clara L. Davis Long5, Les Dethlefsen1, Adam Burns1, Peter M. Loomer6, Gary C. Armitage7, Mark I. Ryder7, Meredith E. Millman7, Rob Knight4, Susan P. Holmes8, David A. Relman1,5,9*
+
+Originally published online at https://doi.org/10.1101/541052 
+
+We performed a case study to illustrate the application of some statistical and ecological models to the spatial analysis of oral microbial communities.
+
+###Subjects 
+Specimens were collected from five individuals who had not taken antibiotics for at least three months and did not require antibiotics prior to dental visits. All subjects were non-smokers over the age of 21 and had at least 14 remaining teeth. Three subjects were female and two were male. Ages ranged from 25-39. One subject was African-American and four were Caucasian. Subjects were excluded if they had diabetes mellitus, HIV infection, blood dyscrasias, or were pregnant or lactating.
+
+Complete periodontal examinations were conducted before sample collection. The periodontal status of subjects was determined by Dr. Peter Loomer at the UCSF School of Dentistry in 2012. The full-mouth periodontal assessments included probing depth (mm, PD), clinical attachment loss (mm, CAL), bleeding upon probing (yes/no, BOP), and the Plaque Index of Silnes and Loe (Silness and Loe 1964). All clinical measurements were recorded at 6 sites around each tooth (i.e. mesialbuccal, mesial, distobuccal, mesiolingual, and distolingual) with a North Carolina periodontal probe. 
+
+Subjects were considered periodontally healthy if on a full mouth basis they met the following criteria: 1) mean pre-treatment CAL of ≤ 0.5, 2) no interproximal sites with CAL ≥ 3, no PD > 4, 4) no more than 3% (5/168) sites with BOP, and 3) no more than 2 missing teeth with the exception of extracted third molars or teeth that are congenitally missing. One subject (male) was sampled at 34 subgingival sites, and one subject (female) was sampled at 32 subgingival sites (teeth 5 and 12 were excluded because they were missing) 
+
+### Sample collection
+Whole saliva was collected by asking the patient to expectorate into a Nunc vial containing 200-μL of phosphate-buffered solution (PBS). All subjects were sampled at 5 soft tissue sites (dorsum of tongue, ventral tongue surface, hard palate, buccal mucosa, and keratinized buccal gingiva), and one saliva sample was collected from each individual.Soft tissue samples were collected with a sterile plastic spatula and subgingival samples were collected with a sterile curette. 
+
+Prior to sampling, subgingival sites were isolated with cotton rolls and gently dried with an air syringe. All samples were transferred to a Nunc collection vial containing 200-μL of PBS. Samples were then vortexed for 3 seconds and spun down briefly with a tabletop centrifuge. Vials were immediately frozen on dry ice and transported to the lab, where they were placed at -80 degrees Celsius for storage. In the image below, circles represent samples of subgingival sites that were sampled.
+
+```{r fig.width=4, fig.height=4,echo=FALSE}
+library(png)
+library(grid)
+img <- readPNG("/Users/proctordm/Desktop/Personal/Perio2000_submitted/KatieTeeth.png")
+ grid.raster(img)
+```
+
+
+
+### DNA extraction
+Collected samples were stored at -80°C for no more than 7 days before extraction. Sample DNA was extracted using the QIAamp DNA extraction mini kit (Qiagen) with an additional bead-beating step after the incubation at 94°C. To maximize diversity while minimizing loss during bead-beating, samples were split, half were bead-beat at 4.0 m/s for 30 seconds in a FastPrep machine, and the two halves were recombined. All downstream steps were performed on the combined sample.
+
+### 16S gene amplification and sequencing
+The V4 region of the 16S rRNA gene was amplified and sequenced
+using the primers specified by Caporaso et al, following the Earth Microbiome Projectʼs pipeline (http://www.earthmicrobiome.org/emp-standard-protocols/) (Caporaso et al. 2012). The 291 bp length V4 to V5 region amplification was performed using the 515F primer and the 806R Golay–barcoded reverse primers (for a full list of these primers visit http://www.earthmicrobiome.org/emp-standard-protocols/). PCR was completed in triplicate and products were pooled. Each pool was then quantified using PicoGreen (Invitrogen) and a plate reader. Once quantified, different volumes of each of the products were pooled into a single tube so that an equal amount (ng) of DNA from each sample was represented within the pool, and cleaned using the UltraClean® PCR Clean-Up Kit (MoBIO). Amplicons were then sequenced in a 151bp x 12bp x 151bp MiSeq run using the recently described custom sequencing primers and procedures (Caporaso et al. 2012).
+
+Over all subjects, a total of 135 subgingival samples were collected. Samples collected from seven subgingival sites (5.2%) were excluded from the analysis due to insufficient quantity of biomass for amplification. In addition, Illumina-generated sequences were discarded if the sequence contained one or more ambiguous bases, contained less than 75 bases in the high-quality region of the sequence, or the barcode was not an exact match to a barcode in the mapping file.
+
+These procedures generated a dataset of 2,527,634 V4-specific 16S rRNA sequences.
+
+
+### Sequence Data Analysis
+Data were stored in Qiita and downloaded after demultiplexing sequences. The sequences were imported into R and were quality filtered  with dada2 and subject to decontamination before analysis. For full details, refer to the Script "Periodontology 2000_Pre-Processing".
+
+
+### Import the data and load libraries
+Note that the tooth labeled "tooth" is also labeled "Saliva" elsewhere in the mapping file, but the sampleID suggests that the data elsewhere in the mapping file is correct: 1032.72.2MB, i.e., it represents tooth 2mb. However, since it's unclear whether this represents a subgingival or surpagingival sample it will be discarded.
+
+
+```{r, admin, echo=FALSE, error=FALSE, warning=FALSE, include=FALSE}
+library("phyloseq");library("ggplot2");library(gridExtra);library("stringr");library("reshape2");library("genefilter"); library(knitr);library(DESeq2); theme_set(theme_bw());library(doBy);library(ggrepel);library(spdep);library(RColorBrewer)
+
+
+```
+
+How many samples are in the dataset?
+```{r}
+discovery = readRDS("~/Desktop/Personal/Perio2000_submitted/perio/katie_biogeo_tree.RDS")
+discovery
+
+#how many subjects
+levels(sample_data(discovery)$Subject)
+
+#what's the median sequencing depth
+summary(sample_sums(discovery))
+
+#let's drop the sample whose site-origin is unknown
+discovery = subset_samples(discovery, SampleID !="1032.72.2MB")
+```
+
+
+
+# Description of data: Phyla level composition of subgingival plaque
+The top 5 phyla are proteobacteria, firmicutes, actinobacteria, bacteroidetes, and fusobacteria. These represent 98% of all reads.
+
+```{r, warning=FALSE, message=FALSE}
+subgingival = subset_samples(discovery, SampleType=="subgingival tooth")
+#how many unique phyla are found?
+length(get_taxa_unique(subgingival, taxonomic.rank="Phylum"))
+
+#What is the relative abundance of each Phylum?
+phy <- tax_glom(subgingival, taxrank="Phylum")
+      tax.count <- data.frame(taxa_sums(phy),tax_table(phy)[,2])
+      rownames(tax.count)= NULL
+      colnames(tax.count)[1] <- c("Abundance")
+      tax.count$Percent <- round(tax.count$Abundance/sum(tax.count$Abundance)*100, 4)
+      library(plyr)
+      Phylum_df <- tax.count[with(tax.count, order(-Percent)), ] 
+      
+      #how much do the top 5 phyla contribute to total abundance?
+      top5 <- Phylum_df[1:5, ]
+      round(sum(top5$Percent),2)
+
+      #What are the top 5 Phyla?
+      top5
+
+```
+
+
+## Description of data: genus-level summary of subgingival plaque
+Here, we look at the top 10 genera and the number of species of each.
+```{r, warning=FALSE, }
+#What is the number of Genera found?
+length(get_taxa_unique(subgingival, taxonomic.rank="Genus"))
+
+#what are the abundance levels of each genus?
+supra.genus <- tax_glom(subgingival, taxrank="Genus")
+        tax.count <- data.frame(tax_table(supra.genus)[,2:6], taxa_sums(supra.genus))
+        rownames(tax.count) = NULL
+        colnames(tax.count) <- c("Phylum","Class","Order","Family","Genus",  "Abundance")
+        tax.count$Percent <- round(tax.count$Abundance/sum(tax.count$Abundance)*100, 4)
+        library(plyr)
+        Genus_df <- tax.count[with(tax.count, order(-Percent)), ] 
+        
+        #how much do the top 10 genera contribute to total abundance?
+        top10 <- Genus_df[1:10, ]
+        round(sum(top10$Percent),3)
+
+###How diverse are the top 10 genera? i.e., how many species are there per genus?
+top10 <- as.vector(Genus_df$Genus[1:10])
+Diversity.list <- vector("list", 10)
+names(Diversity.list) <- top10
+
+for(i in 1:length(top10)){
+       physub = subset_taxa(discovery, Genus==top10[i])
+       physub = prune_taxa(taxa_sums(physub) > 0, physub)
+       Diversity.list[[i]] <- physub
+}
+
+#compute the number of taxa in each element of the list
+Ntaxa <- data.frame(unlist(lapply(Diversity.list, ntaxa)))
+
+colnames(Ntaxa) <- "N.Species"
+#Make a table with percent abundance and number of taxa
+genus.tab <- data.frame(Genus_df[1:10,], Ntaxa)
+library(knitr)
+kable(genus.tab, format="markdown")
+```
+
+
+# Figure 1: What taxa dominate the mouths of illumina sequenced subjects?
+Code is shown for Panel A. Panel B of this figure was generated by SitePainter (http://biocore.github.io/SitePainter/), a utility developed by the Knight lab.
+```{r, fig.width=8}
+#let's filter the taxa to retain only those that are present in 20 samples 
+filtergroup = filterfun(kOverA(k=20, A=1)) #k = number of samples; A = abundance
+        filt_phy = filter_taxa(discovery, filtergroup, prune=TRUE) 
+        filt_phy = prune_samples(sample_sums(filt_phy) > 0, filt_phy) 
+
+#now let's look at the rank abundance curve for each subject independently   
+#further for each subject we're only going to look at the top 10 most abundant taxa
+subjects = levels(as.factor(sample_data(filt_phy)$Subject))[1:2]
+
+myTaxa = c("Prevotella",  "Fusobacterium")
+mySubset = subset_taxa(filt_phy, Genus %in% myTaxa)
+racurves <- vector('list', length(subjects))
+names(racurves) = subjects
+for(i in 1:length(subjects)){
+          sub1 = subset_samples(mySubset, Subject==subjects[i])
+          tax = data.frame(taxa_sums(sub1), tax_table(sub1))
+          colnames(tax)[1] = "Abundance"
+          tax <- tax[order(tax$Abundance, decreasing=TRUE),]
+          tax$rank <- 1:ntaxa(sub1)
+          tax$Subject = subjects[i]
+          racurves[[i]] = tax
+}
+
+#now we can plot the rank abundance curves
+df = do.call("rbind", racurves) 
+df$Subject = revalue(df$Subject, c("72"="Subject 1", "73"="Subject 2"))
+
+p1 = ggplot(df, aes(Genus, Abundance, fill=Phylum)) + geom_bar(stat="identity")  +
+      facet_wrap(~Subject, ncol=1) + coord_flip() +
+      theme(plot.title = element_text(color="black", size=12, face="bold.italic"),
+      axis.title.x = element_text(color="black", size=12, face="bold"),
+      axis.title.y = element_text(color="black", size=12, face="bold"),
+      text = element_text(size=12), axis.text.x = element_text(angle=45, hjust=1))  + ggtitle("a)")
+p1
+
+#make a map of the distribution of these genera across sites
+library(RColorBrewer)
+myPalette = colorRampPalette(brewer.pal(8, "RdBu"), space="Lab")
+myGlom = tax_glom(mySubset, "Genus")
+myGlom = subset_samples(myGlom, Subject %in% c("72", 73))
+tax = data.frame(tax_table(myGlom))
+taxa_names(myGlom) = tax$Genus 
+df = data.frame(otu_table(myGlom), sample_data(myGlom))
+df$Subject = revalue(df$Subject, c("72"="Subject 1", "73"="Subject 2"))
+
+dfm = melt(df, id.vars = colnames(sample_data(myGlom)))
+p2 = ggplot(dfm, aes(x, y, fill=value, label=Tooth_Number)) + facet_wrap(Subject~variable, ncol=2)+ geom_label(size=2)+
+      scale_fill_gradientn(colours=myPalette(75))+
+      theme(plot.title = element_text(color="black", size=12, face="bold.italic"),
+      axis.title.x = element_text(color="black", size=12, face="bold"),
+      axis.title.y = element_text(color="black", size=12, face="bold"),
+      text = element_text(size=12), axis.text.x = element_text(angle=45, hjust=1))  + ggtitle("b)") +
+      guides(fill=guide_legend(title="Abundance"))
+
+p2
+
+#generate figure 1
+
+grid.arrange(p1, p2, ncol=2)
+ggsave(grid.arrange(p1, p2, ncol=2), filename = "~/Desktop/Figure1.eps", device="eps", height =6, width = 11)
+
+```
+
+# Figure 2: What spatial pattern best describes subgingival communities?
+Figure 2A: Use the trend surface analysis to look at broad scale spatial patterns
+```{r, fig.width=6, fig.height=6, warning=FALSE, message=FALSE} 
+subgingival = subset_samples(discovery, SampleType=="subgingival tooth")
+
+#filter to retain taxa present in at least 2 samples
+filtergroup = filterfun(kOverA(k=2, A=1)) #k = number of samples; A = abundance
+        filt_phy = filter_taxa(subgingival, filtergroup, prune=TRUE) 
+        filt_phy = prune_taxa(taxa_sums(filt_phy) > 0, filt_phy)
+        filt_phy = prune_samples(sample_sums(filt_phy) > 0, filt_phy)
+        filt_phy
+        
+        library(vegan)
+          #hellinger transform the data
+          otus = data.frame(otu_table(filt_phy))
+          otus.h = decostand(otus, "hellinger")
+          map = sample_data(filt_phy)
+          map$x = as.numeric(as.character(map$x))
+          map$y = as.numeric(as.character(map$y))
+          
+          #center the coordinates
+          xygrid = cbind(map$x, map$y)
+          xygrid.c <- scale(xygrid, scale=FALSE)
+          
+          ### Compute the third-order orthogonal polynomial function using centered geographic coordinates
+          poly.xy3 <- poly(xygrid.c, degree = 3, raw=FALSE) #, coefs=TRUE) 
+          colnames(poly.xy3) <- c("X", "X^2", "X^3", "Y", "XY", "X^2Y", "Y^2", "XY^2", "Y^3")
+          poly.xy3.df <- data.frame(poly.xy3, map$x, map$y)
+          
+          library(ade4)
+          #perform the RDA on the hellinger transformed data; extract the coordinates 
+          rld.pca <- dudi.pca(otus.h , center=TRUE, scale=TRUE, scannf=FALSE, nf=10)
+          rld.xy3 <- pcaiv(rld.pca, poly.xy3, scannf = FALSE, nf = 6)
+          rld.xy3.df <- data.frame(rld.xy3$ls, map)
+          xy3.df <- data.frame(rld.xy3.df, poly.xy3)
+          
+          # how much of the variance does the trend surface model explain?
+          rld.xy3.var <- sum(rld.xy3$eig)/sum(rld.pca$eig)*100
+          rld.xy3.var
+          
+          #look at the eigenvalues
+          rld.xy3$eig
+          
+          #look at the screeplot
+          screeplot(rld.xy3) #we should look at the first 3 axes
+          
+          #what is the percent of ewxplained variance
+          Explainedvariance = rld.xy3$eig/sum(rld.xy3$eig)*100
+          Explainedvariance
+          
+          #force x, y to numeric
+          xy3.df$x <- as.numeric(as.character(xy3.df$x))
+          xy3.df$y <- as.numeric(as.character(xy3.df$y))
+
+
+### Force variables to order in ggplot
+order=1:32
+xy3.df$Tooth_Number <- factor(xy3.df$Tooth_Number, as.character(order))
+xy3.df$Tooth_Number <- as.numeric(xy3.df$Tooth_Number)
+
+#plot axis 1
+xy3.df$MyToothClass = xy3.df$Tooth_Class
+xy3.df$MyToothClass = revalue(xy3.df$MyToothClass, c("Incisor_Central"="Incisor", "Incisor_Lateral"="Incisor"))
+
+xy3.df$Subject = revalue(xy3.df$Subject, c("72"="Subject 1", "73"="Subject 2"))
+
+
+fig2a = ggplot(xy3.df, aes(Tooth_Number, Axis1))  + theme_bw() + ylab("Axis 1") + 
+      xlab("Tooth")  + geom_point(aes(color=MyToothClass))+ geom_smooth() + ylab("Axis 1(29.24%)") +
+      guides(color=guide_legend(title="Tooth Class"))+
+      theme(plot.title = element_text(color="black", size=12, face="bold.italic"),
+      axis.title.x = element_text(color="black", size=12, face="bold"),
+      axis.title.y = element_text(color="black", size=12, face="bold"),
+      text = element_text(size=12), axis.text.x = element_text(angle=0, hjust=1))  + facet_wrap(~Subject) +
+      ggtitle("a)")
+
+fig2a
+```
+
+## Figure 2B, Moran's Eigenvector Maps (MEM) to identify broad and fine scale spatial patterns
+########################################## MEM ########################################################
+- Note: the code here is from the Vignette: Stephane Dray, 2008. Moran's eigenvectors of spatial weighting of matrices in R.
+
+- The analysis above raises two questions related to the question or how a neighborhood should be defined since an arbitrary cutoff is used to define what is near and what is not. MEM offers a flexible way of solving this problem by allowing for construction of multiple models each differing in their definition of neighbor. Different model selection parameters can then be used to choose the model that explains the most variance
+
+
+##### Generate the neighbor graph
+```{r}
+path="~/Desktop/Personal/Perio2000_submitted/PCNM/sedar-master/pkg/PCNM/R"
+myPCNM_in <- sort(list.files(path, pattern="*R", full.names = TRUE))
+
+for(i in 1:length(myPCNM_in)) {
+    source(myPCNM_in[[i]])
+}
+
+
+#subset on the buccal aspect
+map = data.frame(sample_data(filt_phy))
+map <- map[order(map$Tooth_Number),] 
+
+nbear1 <- dnearneigh(xygrid, 0, 0.3)
+plot(nbear1, xygrid, col="red", pch=20, cex=2)
+
+#compute the euclidean distances between sites and select for neighbors
+dist_nbear1 <- nbdists(nbear1, xygrid)
+str(dist_nbear1)
+
+#define weights as a function of distance
+fdist <- lapply(dist_nbear1, function(x) 1-x/max(dist(xygrid)))
+
+#create the spatial weights
+listw_nbear1 = nb2listw(nbear1, glist=fdist, style="B")
+listw_nbear1
+```
+
+#### Select the spatial weighting matrix
+```{r}
+ #fau <- sqrt(otus/outer(apply(otus, 1, sum), rep(1, ncol(otus)), "*"))
+ #detrend
+ faudt <- resid(lm(as.matrix(otus.h) ~ as.matrix(xygrid)))
+library(spacemakeR)
+ sc.nbear1 = scores.listw(listw_nbear1)
+ AIC.nbear1 = ortho.AIC(faudt, sc.nbear1$vectors)
+ AIC.nbear1
+ 
+ #get the min AIC
+ min(AIC.nbear1, na.rm=TRUE)
+ which.min(AIC.nbear1)
+ 
+ #test.W takes 2 arguments (response matrix, object of class nb); it returns the best model
+ nbear1.res = test.W(faudt, nbear1)
+ names(nbear1.res)
+ names(nbear1.res$best)
+ 
+  
+ #estimate the best values of the parameters
+  f2 <- function(x, dmax, y) {
+     1 - (x^y)/(dmax)^y
+ }
+ maxi <- max(unlist(nbdists(nbear1, as.matrix(xygrid))))
+ 
+ tri.f2 <- test.W(faudt, nbear1, f = f2, y = 2:10, dmax = maxi,
+xy = xygrid)
+ 
+ names(tri.f2$best)
+ myspec = variogmultiv(faudt, xygrid, nclass=20)
+ myspec
+ 
+ plot(myspec$d, myspec$var, ty="b", pch=20, xlab="Distance", ylab=("C(distance"))
+```
+
+
+#### construct 20 neighborhood matrices 
+The distance criterion varies along the sequence of 20 evenly distributed values between 0.2 and 2; then use this to pick the threshold of the best model for comparison with the PCNM and the trend surface analysis
+```{r}
+
+#create 20 different models at differing thresholds
+dxy = seq(give.thresh(dist(xygrid)), 5, le=20)
+nbdnnlist <- lapply(dxy, dnearneigh, x = xygrid, d1 = 0)
+
+#test the best model across this list of 20 different models
+dmn.bin = lapply(nbdnnlist, test.W, Y=faudt)
+length(dmn.bin)
+
+#for each nb we can find the lowest AIC
+minAIC = sapply(dmn.bin, function(x) min(x$best$AICc, na.rm = T))
+which.min(minAIC)
+dxy[which.min(minAIC)]
+```
+
+#### Extract the best model
+```{r, fig.height=9, fig.width=12}
+MEM.champ = unlist(dmn.bin[which.min(minAIC)], recursive = FALSE)
+summary(MEM.champ)
+
+MEM.champ$best$values #eigenvalues
+MEM.champ$best$ord #MEM variables by order of R2
+
+#MEM variables selected in the best model
+mem_ID = MEM.champ$best$ord[1:which.min(MEM.champ$best$AICc)]
+length(mem_ID)
+sort(mem_ID)
+MEM.all <- MEM.champ$best$vectors
+MEM.select <- MEM.champ$best$vectors[,sort(c(mem_ID))]
+
+
+#unadjusted of the best model
+R2.membest = MEM.champ$best$R2[which.min(MEM.champ$best$AICc)]
+
+#adjusted of the best model
+RsquareAdj(R2.membest, nrow(otus.h), length(mem_ID))
+
+
+df = data.frame(MEM.select, sample_data(filt_phy))
+df$x = as.numeric(as.character(df$x))
+df$y = as.numeric(as.character(df$y))
+dfm = melt(df, id.vars = colnames(sample_data(filt_phy)))
+
+#plot the fitted model
+myPalette = colorRampPalette(brewer.pal(11, "RdBu"), space="Lab")
+dfm$variable = revalue(dfm$variable, c("MEM.select"="Best MEM Model"))
+dfm$Subject = revalue(dfm$Subject, c("72"="Subject 1", "73"="Subject 2"))
+
+fig2b = ggplot(dfm, aes(x, y, color=value)) + geom_point(aes(x=x, y=y)) + coord_fixed() +
+        scale_x_continuous(limits=c(-1,1)) + geom_jitter(position=position_jitter(width=0.025, height = 0.025), size=3) +   
+        scale_color_gradientn(colours=myPalette(100)) + theme_bw()  +
+        theme(plot.title = element_text(color="black", size=12, face="bold.italic"),
+         axis.title.x = element_text(color="black", size=12, face="bold"),
+         axis.title.y = element_text(color="black", size=12, face="bold"),
+         text = element_text(size=12), axis.text.x = element_text(angle=0, hjust=1))  + facet_wrap(~Subject) + 
+          ggtitle("b)")
+  
+
+grid.arrange(fig2a, fig2b, ncol=2)
+ggsave(grid.arrange(fig2a, fig2b, ncol=2), filename = "~/Desktop/Figure2.eps", device="eps", height =5, width = 11)
+
+```
+
+
+
+#### Let's do an RDA using the 10 retained MEM variables
+```{r, fig.height=9, fig.width=12}
+library(vegan)
+fm.mem.rda = rda(otus.h~., as.data.frame(MEM.select))
+fm.MEM.r2a = RsquareAdj(fm.mem.rda)$adj.r.squared
+fm.MEM.r2a
+
+anova.cca(fm.mem.rda)
+#how many axes are significant
+axes.mem.test = anova.cca(fm.mem.rda, by="axis")
+axes.mem.test
+
+#how many terms are significant
+terms.mem.test = anova.cca(fm.mem.rda, by="terms")
+terms.mem.test
+```
+
+# Figure 3: Ecological model - application of metacommunity theory to subgingival communities
+### Look at Coherence
+```{r, results=FALSE}
+library(metacom)
+subjects = levels(sample_data(filt_phy)$Subject)
+sub_Cohere <- vector('list', length(subjects))
+names(sub_Cohere) = subjects
+for(i in 1:length(subjects)){
+            s1 = subset_samples(filt_phy, Subject==subjects[[i]])
+            s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+            s1 = prune_samples(sample_sums(s1) > 0, s1)
+            hab = merge_samples(s1, "Habitat.Specific")
+            otus = data.frame(otu_table(hab))
+            otus.pa = decostand(otus, "pa")
+            cohere.out = Coherence(otus.pa, method = "r1", sims = 999, scores = 1, order = TRUE, 
+                                   allowEmpty = TRUE, binary = TRUE, verbose = TRUE, seed = 1)
+            sub_Cohere[[i]] = cohere.out
+}
+
+fm = do.call("rbind", sub_Cohere)
+foo= colsplit(rownames(fm), "([.])", c("Subject", "junk"))
+fm$Subject = foo$Subject
+
+#subset on features for plotting
+Cohere = subset(fm, name %in% c("embAbs", "simMean"))
+Cohere$Subject = revalue(as.factor(Cohere$Subject), c("72"="Subject 1", "73"="Subject 2"))
+
+p1 = ggplot(Cohere, aes(name, stat)) + geom_boxplot() + ylab("Number of embedded absences") + xlab("")+
+        geom_point(size=4, aes(color=as.factor(Subject))) + guides(color = guide_legend(title = "Subject")) +
+      theme(plot.title = element_text(color="black", size=12, face="bold.italic"),
+      axis.title.x = element_text(color="black", size=12, face="bold"),
+      axis.title.y = element_text(color="black", size=12, face="bold"),
+      text = element_text(size=12), axis.text.x = element_text(angle=45, hjust=1))  + ggtitle("a)")
+```
+
+### Look at Turnover
+```{r, results=FALSE}
+subjects = levels(sample_data(filt_phy)$Subject)
+sub_Turnover <- vector('list', length(subjects))
+names(sub_Turnover) = subjects
+for(i in 1:length(subjects)){
+          s1 = subset_samples(filt_phy, Subject==subjects[[i]])
+          s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+          s1 = prune_samples(sample_sums(s1) > 0, s1)
+          hab = merge_samples(s1, "Habitat.Specific")
+          otus = data.frame(otu_table(hab))
+          otus.pa = decostand(otus, "pa")
+          turn.out = Turnover(otus.pa, method = "r1", sims = 999, scores = 1, order = TRUE, 
+                              allowEmpty = TRUE, binary = TRUE, verbose = TRUE)
+          sub_Turnover[[i]] = turn.out
+}
+
+fm = do.call("rbind", sub_Turnover)
+foo= colsplit(rownames(fm), "([.])", c("Subject", "junk"))
+fm$Subject = foo$Subject
+
+#subset on features for plotting
+turn = subset(fm, name %in% c("turnover", "simMean"))
+turn$Subject = revalue(as.factor(turn$Subject), c("72"="Subject 1", "73"="Subject 2"))
+
+p2 = ggplot(turn, aes(name, stat)) + geom_boxplot() + geom_point(size=3, aes(color=as.factor(Subject))) + 
+      ylab("Species turnover across sites") + xlab("")+
+      theme(plot.title = element_text(color="black", size=12, face="bold.italic"),
+      axis.title.x = element_text(color="black", size=12, face="bold"),
+      axis.title.y = element_text(color="black", size=12, face="bold"),
+      text = element_text(size=12), axis.text.x = element_text(angle=45, hjust=1))  + 
+      guides(color = guide_legend(title = "Subject")) + ggtitle("b)")
+```
+
+### Look at boundary clumping
+```{r, results=FALSE, fig.height=5, fig.width=12}
+subjects = levels(sample_data(filt_phy)$Subject)
+sub_clump <- vector('list', length(subjects))
+names(sub_clump) = subjects
+for(i in 1:length(subjects)){
+          s1 = subset_samples(filt_phy, Subject==subjects[[i]])
+          s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+          s1 = prune_samples(sample_sums(s1) > 0, s1)
+          hab = merge_samples(s1, "Habitat.Specific")
+          otus = data.frame(otu_table(hab))
+          otus.pa = decostand(otus, "pa")
+          boucl.pa = BoundaryClump(otus.pa, order = TRUE, scores = 1, binary = TRUE, fill = TRUE) 
+          sub_clump[[i]] = boucl.pa
+}
+
+
+fm = do.call("rbind", sub_clump)
+foo= colsplit(rownames(fm), "([.])", c("Subject", "junk"))
+fm$Subject = foo$Subject
+
+#subset on features for plotting
+bound = subset(fm, name %in% c("index"))
+bound$Subject = revalue(as.factor(bound$Subject), c("72"="Subject 1", "73"="Subject 2"))
+
+p3 = ggplot(bound, aes(name, stat)) + 
+      geom_point(size=3, aes(color=as.factor(Subject))) + xlab("")+
+      theme(plot.title = element_text(color="black", size=12, face="bold.italic"),
+      axis.title.x = element_text(color="black", size=12, face="bold"),
+      axis.title.y = element_text(color="black", size=12, face="bold"),
+      text = element_text(size=12), axis.text.x = element_text(angle=45, hjust=1))  + 
+      ylab("Morisita Index (Boundary Clumping)")+ guides(color = guide_legend(title = "Subject")) + ggtitle("c)")
+
+```
+
+
+```{r, fig.width=12, fig.height=6}
+grid.arrange(p1, p2, p3, ncol=3)
+ggsave(grid.arrange(p1, p2, p3, ncol=3), filename = "~/Desktop/Figure3.eps", device="eps", height =5, width = 11)
+
+```
+
+# Figure 4: Looking at the Neutral Model
+This model was generated by Katie Shelef as described in her thesis: http://purl.stanford.edu/wp568qs4457 
+
+
+# Table 1: Looking at dispersal using two distance models
+
+## Model 1: The straight line distance, Euclidean distance
+```{r}
+#########################Typodant
+# test Mantel on the typodant model - Subject 1
+M1 = data.table::fread("Distance_matrix_Illumina_DirectMeasurement_Sub72AllAspects.txt")
+M1 = M1[,-1]
+  my72 = subset_samples(subgingival, Subject==72)
+  my72 = prune_taxa(taxa_sums(my72) > 0, my72)
+  my72 = as.matrix(otu_table(my72))
+  brayM = vegdist(my72, "bray")
+  mantel.bray = mantel(brayM, M1, permutations=9999)
+  mantel.bray
+
+  
+  
+# test Mantel on the typodant model- Subject 2
+M2 = data.table::fread("Distance_matrix_Illumina_DirectMeasurement_Sub73AllAspects.txt")
+names = M2[,1]
+M2 = M2[,-1]
+
+  my73 = subset_samples(subgingival, Subject=="73")
+  my73 = subset_samples(my73, !(Specifier.Specific %in% c("Sub_15L"))) #not in distance matrix, drop it
+  my73 = merge_samples(my73, "Specifier.Specific")
+  my73 = as.matrix(otu_table(my73))
+  brayM = vegdist(my73, "bray")
+  mantel1.bray = mantel(brayM, M2, permutations=9999)
+  mantel1.bray
+```
+
+## Model 2: distances measured as # of Teeth apart
+```{r}
+
+  # test Mantel on the typodant model - Subject 1
+M1 = data.table::fread("~/Desktop/Personal/Perio2000_submitted/perio/Distance_matrix_illumina_NumberTeethApart_Sub72AllAspects.txt")
+M1 = M1[,-1]
+  my72 = subset_samples(subgingival, Subject=="72")
+  my72 = prune_taxa(taxa_sums(my72) > 0, my72)
+  my72 = as.matrix(otu_table(my72))
+  brayM = vegdist(my72, "bray")
+  mantel.bray = mantel(brayM, M1, permutations=9999)
+  mantel.bray
+
+  
+  
+# test Mantel on the typodant model- Subject 2
+M2 = data.table::fread("~/Desktop/Personal/Perio2000_submitted/perio/Distance_matrix_illumina_NumberTeethApart_Sub73AllAspects.txt")
+names = M2[,1]
+M2 = M2[,-1]
+
+  my73 = subset_samples(subgingival, Subject=="73")
+  my73 = subset_samples(my73, !(Specifier.Specific %in% c("Sub_15L")))
+  my73 = merge_samples(my73, "Specifier.Specific")
+  my73 = as.matrix(otu_table(my73))
+  brayM = vegdist(my73, "bray")
+  mantel1.bray = mantel(brayM, M2, permutations=9999)
+  mantel1.bray
+
+```
+
